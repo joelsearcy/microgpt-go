@@ -29,7 +29,7 @@ go run ./cmd/microgpt
 
 The model will:
 1. Download the names dataset (32k unique names)
-2. Train a 1-layer transformer for 1000 steps (~30 seconds)
+2. Train a 1-layer transformer for 1000 steps (~4 seconds)
 3. Generate 20 new, hallucinated names
 
 ## Example Output
@@ -129,30 +129,62 @@ for pos := 0; pos < maxLength; pos++ {
 
 ## Performance Optimizations
 
-This implementation uses several Go-specific optimizations:
+This implementation achieves a **7x speedup** over a naive port through careful optimization:
 
-| Optimization | Speedup | Technique |
-|--------------|---------|-----------|
-| FlatMatrix | 2-3x | Contiguous memory (cache-friendly) |
-| Struct fields | 61x | Direct access vs map lookup |
-| Pre-allocation | Varies | Avoid append() in hot loops |
-| Sequential matmul | 3.5x | No goroutines for small ops |
+| Metric | Naive | Optimized | Improvement |
+|--------|-------|-----------|-------------|
+| Training time | ~30s | **~4.3s** | **85% faster** |
+| Memory/step | 13.7 MB | 2.2 MB | 84% reduction |
+| Allocs/step | 191,790 | 19,346 | 90% reduction |
 
-See [PLAN.md](PLAN.md) for detailed performance analysis.
+### Key Optimizations
 
-## Testing
+| Technique | Impact | Description |
+|-----------|--------|-------------|
+| **FlatMatrix layout** | 2-3x faster | Contiguous memory for cache efficiency |
+| **Struct vs map** | 61x faster | Direct field access vs map lookup |
+| **Fused DotProduct** | 97% fewer allocs | Single graph node for vector dot products |
+| **Fused Softmax** | 90% fewer allocs | Single operation instead of N intermediate Values |
+| **Pre-allocated buffers** | Eliminates reallocs | Capacity hints for KV cache and backward pass |
+| **Sequential execution** | 3.5x faster | No goroutines for small operations |
 
-Run the comprehensive test suite:
+See [PLAN.md](PLAN.md) for detailed performance analysis and [pkg/model/benchmark_test.go](pkg/model/benchmark_test.go) for benchmarks.
+
+## Testing & Benchmarking
+
+### Run Tests
 
 ```bash
+# Run all tests
 go test ./... -v
+
+# Run with coverage
+go test ./... -cover
 ```
 
 Tests include:
 - Gradient correctness (analytical vs numerical)
 - Basic operations (add, mul, exp, log, relu)
 - Complex expression backpropagation
+- Fused operations (DotProduct, FusedSoftmax)
 - Neuron simulation
+
+### Run Benchmarks
+
+```bash
+# Benchmark core operations
+go test -bench=. -benchmem ./pkg/model/
+
+# Profile CPU usage
+go run ./cmd/profile
+```
+
+Benchmarks measure:
+- Linear layer performance
+- Softmax computation
+- GPT forward pass
+- Full training step with backward pass
+- Multi-head attention
 
 ## Project Structure
 
@@ -163,16 +195,19 @@ microgpt-go/
 ├── CONCEPTS.md                 # Educational guide
 ├── go.mod                      # Go module definition
 ├── cmd/
-│   └── microgpt/
-│       └── main.go             # Training & inference entry point
+│   ├── microgpt/
+│   │   └── main.go             # Training & inference entry point
+│   └── profile/
+│       └── main.go             # CPU/memory profiling harness
 └── pkg/
     ├── autograd/
     │   ├── value.go            # Value type with operations
-    │   └── value_test.go       # Gradient tests
+    │   └── value_test.go       # Gradient tests (23 tests)
     ├── model/
-    │   ├── params.go           # Weight matrices
+    │   ├── params.go           # Weight matrices (FlatMatrix)
     │   ├── layers.go           # Linear, Softmax, RMSNorm
-    │   └── gpt.go              # Transformer forward pass
+    │   ├── gpt.go              # Transformer forward pass
+    │   └── benchmark_test.go   # Performance benchmarks
     ├── optim/
     │   └── adam.go             # Adam optimizer
     ├── tokenizer/
