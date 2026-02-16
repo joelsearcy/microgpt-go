@@ -17,36 +17,9 @@ func Linear(x []*autograd.Value, w *FlatMatrix) []*autograd.Value {
 	return out
 }
 
-// Softmax with numerical stability (subtract max before exp)
+// Softmax computes softmax with numerical stability using a fused operation
 func Softmax(logits []*autograd.Value) []*autograd.Value {
-	// Find max for numerical stability
-	maxVal := logits[0].Data
-	for _, v := range logits[1:] {
-		if v.Data > maxVal {
-			maxVal = v.Data
-		}
-	}
-
-	// Compute exp(x - max)
-	exps := make([]*autograd.Value, len(logits))
-	for i, v := range logits {
-		shifted := v.Sub(autograd.NewValue(maxVal))
-		exps[i] = shifted.Exp()
-	}
-
-	// Sum of exps
-	sumExp := autograd.NewValue(0)
-	for _, e := range exps {
-		sumExp = sumExp.Add(e)
-	}
-
-	// Normalize
-	out := make([]*autograd.Value, len(logits))
-	for i, e := range exps {
-		out[i] = e.Div(sumExp)
-	}
-
-	return out
+	return autograd.FusedSoftmax(logits)
 }
 
 // RMSNorm: x / sqrt(mean(x²) + eps)

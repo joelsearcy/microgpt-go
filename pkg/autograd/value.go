@@ -1,6 +1,8 @@
 package autograd
 
-import "math"
+import (
+	"math"
+)
 
 // Value represents a scalar value with automatic differentiation support.
 // It tracks the computation graph for backpropagation.
@@ -31,7 +33,6 @@ func Scalar(data float64) *Value {
 func (v *Value) Add(other *Value) *Value {
 	return &Value{
 		Data:       v.Data + other.Data,
-		Grad:       0,
 		children:   []*Value{v, other},
 		localGrads: []float64{1, 1},
 	}
@@ -42,7 +43,6 @@ func (v *Value) Add(other *Value) *Value {
 func (v *Value) Mul(other *Value) *Value {
 	return &Value{
 		Data:       v.Data * other.Data,
-		Grad:       0,
 		children:   []*Value{v, other},
 		localGrads: []float64{other.Data, v.Data},
 	}
@@ -65,7 +65,6 @@ func (v *Value) Sub(other *Value) *Value {
 func (v *Value) Pow(exp float64) *Value {
 	return &Value{
 		Data:       math.Pow(v.Data, exp),
-		Grad:       0,
 		children:   []*Value{v},
 		localGrads: []float64{exp * math.Pow(v.Data, exp-1)},
 	}
@@ -83,7 +82,6 @@ func (v *Value) Exp() *Value {
 	result := math.Exp(v.Data)
 	return &Value{
 		Data:       result,
-		Grad:       0,
 		children:   []*Value{v},
 		localGrads: []float64{result},
 	}
@@ -94,7 +92,6 @@ func (v *Value) Exp() *Value {
 func (v *Value) Log() *Value {
 	return &Value{
 		Data:       math.Log(v.Data),
-		Grad:       0,
 		children:   []*Value{v},
 		localGrads: []float64{1.0 / v.Data},
 	}
@@ -114,7 +111,6 @@ func (v *Value) ReLU() *Value {
 	}
 	return &Value{
 		Data:       data,
-		Grad:       0,
 		children:   []*Value{v},
 		localGrads: []float64{localGrad},
 	}
@@ -209,4 +205,53 @@ func DotProduct(a, b []*Value) *Value {
 		children:   children,
 		localGrads: localGrads,
 	}
+}
+
+// FusedSoftmax computes softmax over a slice of Values as a single operation.
+// This avoids creating intermediate Values for exp, sum, and division.
+// The gradient is: d(softmax_i)/d(logit_j) = softmax_i * (delta_ij - softmax_j)
+func FusedSoftmax(logits []*Value) []*Value {
+	n := len(logits)
+
+	// Forward pass: compute softmax with numerical stability
+	maxVal := logits[0].Data
+	for _, v := range logits[1:] {
+		if v.Data > maxVal {
+			maxVal = v.Data
+		}
+	}
+
+	exps := make([]float64, n)
+	sumExp := 0.0
+	for i, v := range logits {
+		exps[i] = math.Exp(v.Data - maxVal)
+		sumExp += exps[i]
+	}
+
+	probs := make([]float64, n)
+	for i := range exps {
+		probs[i] = exps[i] / sumExp
+	}
+
+	// Create output Values with custom backward logic
+	// Each output depends on ALL inputs (softmax has full Jacobian)
+	out := make([]*Value, n)
+	for i := 0; i < n; i++ {
+		// For output i: children are all logits, localGrads encode the Jacobian row
+		localGrads := make([]float64, n)
+		for j := 0; j < n; j++ {
+			if i == j {
+				localGrads[j] = probs[i] * (1 - probs[j])
+			} else {
+				localGrads[j] = -probs[i] * probs[j]
+			}
+		}
+		out[i] = &Value{
+			Data:       probs[i],
+			children:   logits,
+			localGrads: localGrads,
+		}
+	}
+
+	return out
 }

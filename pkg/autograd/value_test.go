@@ -548,3 +548,37 @@ func TestDotProductNumericalGradient(t *testing.T) {
 		t.Errorf("Numerical gradient check for a[0]: expected ~%v, got %v", numericalGrad, a[0].Grad)
 	}
 }
+
+func TestFusedSoftmaxNumericalGradient(t *testing.T) {
+	// Test that FusedSoftmax gradients match numerical gradients
+	logits := []*Value{NewValue(1.0), NewValue(2.0), NewValue(3.0)}
+	probs := FusedSoftmax(logits)
+
+	// Compute loss = -log(probs[1]) (cross-entropy for target=1)
+	loss := probs[1].Log().Neg()
+	loss.Backward()
+
+	// Numerical gradient check
+	eps := 1e-5
+	for i, logit := range logits {
+		original := logit.Data
+
+		logit.Data = original + eps
+		logitsPlus := []*Value{NewValue(logits[0].Data), NewValue(logits[1].Data), NewValue(logits[2].Data)}
+		probsPlus := FusedSoftmax(logitsPlus)
+		lossPlus := -math.Log(probsPlus[1].Data)
+
+		logit.Data = original - eps
+		logitsMinus := []*Value{NewValue(logits[0].Data), NewValue(logits[1].Data), NewValue(logits[2].Data)}
+		probsMinus := FusedSoftmax(logitsMinus)
+		lossMinus := -math.Log(probsMinus[1].Data)
+
+		logit.Data = original
+
+		numGrad := (lossPlus - lossMinus) / (2 * eps)
+
+		if math.Abs(logits[i].Grad-numGrad) > 1e-4 {
+			t.Errorf("Gradient mismatch for logit[%d]: analytical=%.6f, numerical=%.6f", i, logits[i].Grad, numGrad)
+		}
+	}
+}
