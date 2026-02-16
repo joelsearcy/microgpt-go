@@ -125,8 +125,9 @@ func (v *Value) ReLU() *Value {
 // The gradient of this Value is set to 1 (assumed to be the loss).
 func (v *Value) Backward() {
 	// Build topological order using iterative DFS
-	var topo []*Value
-	visited := make(map[*Value]bool)
+	// Pre-allocate with estimated capacity for typical graph sizes
+	topo := make([]*Value, 0, 4096)
+	visited := make(map[*Value]struct{}, 4096)
 
 	// Iterative DFS using explicit stack
 	type stackItem struct {
@@ -144,17 +145,17 @@ func (v *Value) Backward() {
 			continue
 		}
 
-		if visited[item.node] {
+		if _, ok := visited[item.node]; ok {
 			continue
 		}
-		visited[item.node] = true
+		visited[item.node] = struct{}{}
 
 		// Push the node again to be added to topo after children
 		stack = append(stack, stackItem{item.node, true})
 
 		// Push children
 		for _, child := range item.node.children {
-			if !visited[child] {
+			if _, ok := visited[child]; !ok {
 				stack = append(stack, stackItem{child, false})
 			}
 		}
@@ -181,4 +182,31 @@ func (v *Value) Backward() {
 // ZeroGrad resets the gradient of this Value to 0.
 func (v *Value) ZeroGrad() {
 	v.Grad = 0
+}
+
+// DotProduct computes the dot product of two Value slices as a single operation
+// This avoids creating intermediate Values for each multiply-add
+func DotProduct(a, b []*Value) *Value {
+	if len(a) != len(b) {
+		panic("DotProduct: mismatched lengths")
+	}
+
+	var sum float64
+	n := len(a)
+	children := make([]*Value, 2*n)
+	localGrads := make([]float64, 2*n)
+
+	for i := 0; i < n; i++ {
+		sum += a[i].Data * b[i].Data
+		children[2*i] = a[i]
+		children[2*i+1] = b[i]
+		localGrads[2*i] = b[i].Data   // d(a*b)/da = b
+		localGrads[2*i+1] = a[i].Data // d(a*b)/db = a
+	}
+
+	return &Value{
+		Data:       sum,
+		children:   children,
+		localGrads: localGrads,
+	}
 }

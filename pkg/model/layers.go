@@ -12,12 +12,7 @@ func Linear(x []*autograd.Value, w *FlatMatrix) []*autograd.Value {
 	out := make([]*autograd.Value, w.Rows)
 	for i := 0; i < w.Rows; i++ {
 		row := w.Row(i)
-		// Compute dot product of row with x
-		sum := autograd.NewValue(0)
-		for j := 0; j < len(x); j++ {
-			sum = sum.Add(row[j].Mul(x[j]))
-		}
-		out[i] = sum
+		out[i] = autograd.DotProduct(row, x)
 	}
 	return out
 }

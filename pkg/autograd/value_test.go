@@ -482,3 +482,69 @@ func TestNeuronSimulation(t *testing.T) {
 		t.Errorf("Gradient for b: expected 1.0, got %v", b.Grad)
 	}
 }
+
+// TestDotProduct tests the fused DotProduct operation.
+func TestDotProduct(t *testing.T) {
+	// Create two vectors [1, 2, 3] and [4, 5, 6]
+	a := []*Value{NewValue(1), NewValue(2), NewValue(3)}
+	b := []*Value{NewValue(4), NewValue(5), NewValue(6)}
+
+	// dot product = 1*4 + 2*5 + 3*6 = 4 + 10 + 18 = 32
+	result := DotProduct(a, b)
+
+	if result.Data != 32.0 {
+		t.Errorf("DotProduct: expected 32.0, got %v", result.Data)
+	}
+
+	result.Backward()
+
+	// Gradients: d(a·b)/d(a[i]) = b[i], d(a·b)/d(b[i]) = a[i]
+	expectedAGrads := []float64{4, 5, 6}
+	expectedBGrads := []float64{1, 2, 3}
+
+	for i := range a {
+		if !almostEqual(a[i].Grad, expectedAGrads[i], tolerance) {
+			t.Errorf("DotProduct gradient for a[%d]: expected %v, got %v", i, expectedAGrads[i], a[i].Grad)
+		}
+		if !almostEqual(b[i].Grad, expectedBGrads[i], tolerance) {
+			t.Errorf("DotProduct gradient for b[%d]: expected %v, got %v", i, expectedBGrads[i], b[i].Grad)
+		}
+	}
+}
+
+// TestDotProductNumericalGradient verifies DotProduct gradients numerically.
+func TestDotProductNumericalGradient(t *testing.T) {
+	aData := []float64{0.5, -1.2, 2.3}
+	bData := []float64{1.1, 0.7, -0.4}
+
+	a := make([]*Value, len(aData))
+	b := make([]*Value, len(bData))
+	for i := range aData {
+		a[i] = NewValue(aData[i])
+		b[i] = NewValue(bData[i])
+	}
+
+	result := DotProduct(a, b)
+	result.Backward()
+
+	// Numerical gradient check for a[0]
+	h := 1e-5
+	aPlusH := make([]*Value, len(aData))
+	for i := range aData {
+		if i == 0 {
+			aPlusH[i] = NewValue(aData[i] + h)
+		} else {
+			aPlusH[i] = NewValue(aData[i])
+		}
+	}
+	bCopy := make([]*Value, len(bData))
+	for i := range bData {
+		bCopy[i] = NewValue(bData[i])
+	}
+	resultPlus := DotProduct(aPlusH, bCopy)
+
+	numericalGrad := (resultPlus.Data - result.Data) / h
+	if !almostEqual(a[0].Grad, numericalGrad, 1e-4) {
+		t.Errorf("Numerical gradient check for a[0]: expected ~%v, got %v", numericalGrad, a[0].Grad)
+	}
+}

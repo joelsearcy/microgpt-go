@@ -35,12 +35,17 @@ type KVCache struct {
 	Values [][][]*autograd.Value
 }
 
-// NewKVCache creates an empty KV cache for nLayers
-func NewKVCache(nLayers int) *KVCache {
-	return &KVCache{
+// NewKVCache creates an empty KV cache for nLayers with pre-allocated capacity
+func NewKVCache(nLayers, blockSize int) *KVCache {
+	c := &KVCache{
 		Keys:   make([][][]*autograd.Value, nLayers),
 		Values: make([][][]*autograd.Value, nLayers),
 	}
+	for i := 0; i < nLayers; i++ {
+		c.Keys[i] = make([][]*autograd.Value, 0, blockSize)
+		c.Values[i] = make([][]*autograd.Value, 0, blockSize)
+	}
+	return c
 }
 
 // Reset clears the cache for a new sequence
