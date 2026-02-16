@@ -2,6 +2,8 @@
 
 A Go port of [Andrej Karpathy's microgpt.py](https://gist.github.com/karpathy/8627fe009c40f57531cb18360106ce95) - a complete GPT (Generative Pre-trained Transformer) implementation with **zero external dependencies**.
 
+Based on the concepts from Karpathy's blog post: [*"The most atomic GPT"*](https://karpathy.github.io/2026/02/12/microgpt/)
+
 > "This file is the complete algorithm. Everything else is just efficiency."  
 > — @karpathy
 
@@ -187,6 +189,10 @@ microgpt-go/
 ## Credits
 
 This is a direct port of [Andrej Karpathy's microgpt.py](https://gist.github.com/karpathy/8627fe009c40f57531cb18360106ce95), adapted to idiomatic Go with performance optimizations.
+
+**Related resources:**
+- [Blog post: "The most atomic GPT"](https://karpathy.github.io/2026/02/12/microgpt/) - Karpathy's explanation of the philosophy and design
+- [Original Python gist](https://gist.github.com/karpathy/8627fe009c40f57531cb18360106ce95) - The reference implementation
 
 Original work by [@karpathy](https://github.com/karpathy) - thank you for making deep learning accessible!
 
